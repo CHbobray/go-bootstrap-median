@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 N=${N:-100000}
 B=${B:-2000}
 CORES=$(nproc)
-OUT=results/comparison.jsonl
+OUT=${OUT:-results/comparison.jsonl}
 mkdir -p bin results
 go build -o bin/gendata ./cmd/gendata
 go build -o bin/bootmedian ./cmd/bootmedian
@@ -28,8 +28,8 @@ for shape in positive_skew symmetric negative_skew; do
   echo "$f (B=$B)"
   run "R boot, 1 core"            Rscript r/bootstrap_median.R "$f" "$B" 1 1
   run "R boot, $CORES cores"      Rscript r/bootstrap_median.R "$f" "$B" 1 "$CORES"
-  run "Go naive, 1 core"          ./bin/bootmedian -data "$f" -b "$B" -impl naive
-  run "Go fast, 1 core"           ./bin/bootmedian -data "$f" -b "$B" -impl fast -workers 1
-  run "Go fast, $CORES cores"     ./bin/bootmedian -data "$f" -b "$B" -impl fast -workers "$CORES"
+  run "Go naive, 1 core"          ./bin/bootmedian -data "$f" -b "$B" -impl naive -json
+  run "Go fast, 1 core"           ./bin/bootmedian -data "$f" -b "$B" -impl fast -workers 1 -json
+  run "Go fast, $CORES cores"     ./bin/bootmedian -data "$f" -b "$B" -impl fast -workers "$CORES" -json
 done
 echo "wrote $OUT"

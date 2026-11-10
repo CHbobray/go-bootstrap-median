@@ -1,10 +1,13 @@
-// Command bootmedian reads a one-column CSV and prints the bootstrap
-// standard error of the median as JSON.
+// Command bootmedian reads a one-column CSV file and reports the bootstrap
+// standard error of the median.
 //
-//	bootmedian -data data/symmetric_n100000.csv -b 2000 -impl fast
+//	bootmedian -data data/symmetric_n100000.csv
+//	bootmedian -data data/symmetric_n100000.csv -b 5000 -json
 //
-// Structured logs go to stderr (and to -log if given). -cpuprofile and
-// -memprofile write pprof files for `go tool pprof`.
+// By default it prints a short readable summary. -json prints one line of
+// JSON instead. -v shows progress logs on the screen and -log appends them
+// to a file. -cpuprofile and -memprofile write pprof files for
+// `go tool pprof`.
 package main
 
 import (
@@ -24,7 +27,22 @@ import (
 	"github.com/CHbobray/go-bootstrap-median/bootstrap"
 )
 
-type output struct {
+// options holds the command-line settings.
+type options struct {
+	data    string
+	b       int
+	seed    int64
+	workers int
+	impl    string
+	logPath string
+	cpuProf string
+	memProf string
+	verbose bool
+	asJSON  bool
+}
+
+// report is everything the program prints about one run.
+type report struct {
 	bootstrap.Result
 	File         string  `json:"file"`
 	Impl         string  `json:"impl"`
@@ -36,31 +54,26 @@ type output struct {
 	NumGC        uint32  `json:"num_gc"`
 }
 
-func readColumn(path string) ([]float64, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
+func parseFlags() options {
+	var opts options
+	flag.StringVar(&opts.data, "data", "", "one-column CSV file (required)")
+	flag.IntVar(&opts.b, "b", 2000, "bootstrap replicates (2 or more)")
+	flag.Int64Var(&opts.seed, "seed", 1, "Mersenne Twister seed")
+	flag.IntVar(&opts.workers, "workers", 0, "goroutines for -impl fast (0 = all cores)")
+	flag.StringVar(&opts.impl, "impl", "fast", "naive or fast")
+	flag.BoolVar(&opts.asJSON, "json", false, "print the result as one line of JSON")
+	flag.BoolVar(&opts.verbose, "v", false, "show progress logs on the screen")
+	flag.StringVar(&opts.logPath, "log", "", "append JSON logs to this file")
+	flag.StringVar(&opts.cpuProf, "cpuprofile", "", "write a CPU profile to this file")
+	flag.StringVar(&opts.memProf, "memprofile", "", "write an allocation profile to this file")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "bootmedian: bootstrap standard error of the median")
+		fmt.Fprintln(os.Stderr, "\nUsage: bootmedian -data FILE [options]")
+		fmt.Fprintln(os.Stderr, "\nOptions:")
+		flag.PrintDefaults()
 	}
-	defer f.Close()
-	var x []float64
-	sc := bufio.NewScanner(f)
-	line := 0
-	for sc.Scan() {
-		line++
-		s := strings.TrimSpace(sc.Text())
-		if s == "" {
-			continue
-		}
-		v, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			if line == 1 { // header
-				continue
-			}
-			return nil, fmt.Errorf("%s line %d: %w", path, line, err)
-		}
-		x = append(x, v)
-	}
-	return x, sc.Err()
+	flag.Parse()
+	return opts
 }
 
 // checkInput returns a plain-language description of the first problem with
@@ -88,113 +101,205 @@ func checkInput(data string, b, workers int, impl string) string {
 	return ""
 }
 
-func main() {
-	data := flag.String("data", "", "one-column CSV file (required)")
-	b := flag.Int("b", 2000, "bootstrap replicates")
-	seed := flag.Int64("seed", 1, "Mersenne Twister seed")
-	workers := flag.Int("workers", 0, "goroutines for -impl fast (0 = all cores)")
-	impl := flag.String("impl", "fast", "naive or fast")
-	logPath := flag.String("log", "", "also append JSON logs to this file")
-	cpuProf := flag.String("cpuprofile", "", "write CPU profile here")
-	memProf := flag.String("memprofile", "", "write allocation profile here")
-	verbose := flag.Bool("v", false, "debug logging")
-	flag.Parse()
-
-	var logW io.Writer = os.Stderr
-	if *logPath != "" {
-		lf, err := os.OpenFile(*logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+// newLogger sends JSON logs to the screen when verbose is set and to the
+// file at logPath when one is given. With neither, logs are discarded. The
+// returned function closes the log file.
+func newLogger(logPath string, verbose bool) (*slog.Logger, func(), error) {
+	var writers []io.Writer
+	closeLog := func() {}
+	if verbose {
+		writers = append(writers, os.Stderr)
+	}
+	if logPath != "" {
+		file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return nil, closeLog, err
 		}
-		defer lf.Close()
-		logW = io.MultiWriter(os.Stderr, lf)
+		writers = append(writers, file)
+		closeLog = func() { file.Close() }
 	}
-	level := slog.LevelInfo
-	if *verbose {
-		level = slog.LevelDebug
+	var dest io.Writer = io.Discard
+	if len(writers) > 0 {
+		dest = io.MultiWriter(writers...)
 	}
-	logger := slog.New(slog.NewJSONHandler(logW, &slog.HandlerOptions{Level: level}))
-	fail := func(msg string, err error) {
-		logger.Error(msg, "err", err)
-		fmt.Fprintf(os.Stderr, "bootmedian: %s: %v\n", msg, err)
-		os.Exit(1)
+	return slog.New(slog.NewJSONHandler(dest, nil)), closeLog, nil
+}
+
+// readColumn reads one number per line. A first line that is not a number
+// is treated as a header.
+func readColumn(path string) ([]float64, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	var values []float64
+	scanner := bufio.NewScanner(file)
+	for line := 1; scanner.Scan(); line++ {
+		text := strings.TrimSpace(scanner.Text())
+		if text == "" {
+			continue
+		}
+		value, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			if line == 1 {
+				continue
+			}
+			return nil, fmt.Errorf("line %d is not a number: %q", line, text)
+		}
+		values = append(values, value)
+	}
+	return values, scanner.Err()
+}
+
+// startCPUProfile begins profiling to path and returns the function that
+// stops it. An empty path does nothing.
+func startCPUProfile(path string) (stop func(), err error) {
+	if path == "" {
+		return func() {}, nil
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := pprof.StartCPUProfile(file); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return func() {
+		pprof.StopCPUProfile()
+		file.Close()
+	}, nil
+}
+
+// writeMemProfile saves the allocation profile to path. An empty path does
+// nothing.
+func writeMemProfile(path string) error {
+	if path == "" {
+		return nil
+	}
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return pprof.Lookup("allocs").WriteTo(file, 0)
+}
+
+// runBootstrap times the chosen implementation on values.
+func runBootstrap(values []float64, opts options) (bootstrap.Result, time.Duration, error) {
+	start := time.Now()
+	var result bootstrap.Result
+	var err error
+	if opts.impl == "naive" {
+		result, err = bootstrap.MedianSENaive(values, opts.b, opts.seed)
+	} else {
+		result, err = bootstrap.MedianSE(values, opts.b, opts.seed, opts.workers)
+	}
+	return result, time.Since(start), err
+}
+
+// buildReport adds timings and Go runtime memory statistics to the result.
+func buildReport(result bootstrap.Result, opts options, readTime, bootTime time.Duration) report {
+	const bytesPerMB = 1 << 20
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	return report{
+		Result:       result,
+		File:         opts.data,
+		Impl:         opts.impl,
+		Seed:         opts.seed,
+		ReadSeconds:  readTime.Seconds(),
+		BootSeconds:  bootTime.Seconds(),
+		TotalAllocMB: float64(mem.TotalAlloc) / bytesPerMB,
+		HeapSysMB:    float64(mem.HeapSys) / bytesPerMB,
+		NumGC:        mem.NumGC,
+	}
+}
+
+// writeSummary prints the report for a person to read.
+func writeSummary(w io.Writer, r report) {
+	fmt.Fprintln(w, "Bootstrap standard error of the median")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Data file:       %s\n", r.File)
+	fmt.Fprintf(w, "  Observations:    %d\n", r.N)
+	fmt.Fprintf(w, "  Replicates:      %d (seed %d)\n", r.B, r.Seed)
+	fmt.Fprintf(w, "  Method:          %s, %d worker(s)\n", r.Impl, r.Workers)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Median:          %.4f\n", r.Median)
+	fmt.Fprintf(w, "  Standard error:  %.4f\n", r.SE)
+	fmt.Fprintf(w, "  Bias:            %.4f\n", r.Bias)
+	fmt.Fprintf(w, "  95%% interval:    %.4f to %.4f\n", r.CILower, r.CIUpper)
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "  Time:            %.2f s bootstrap, %.2f s reading data\n", r.BootSeconds, r.ReadSeconds)
+	fmt.Fprintf(w, "  Memory:          %.1f MB allocated, %d garbage collections\n", r.TotalAllocMB, r.NumGC)
+}
+
+// writeReport prints the report as JSON or as a readable summary.
+func writeReport(w io.Writer, r report, asJSON bool) error {
+	if asJSON {
+		return json.NewEncoder(w).Encode(r)
+	}
+	writeSummary(w, r)
+	return nil
+}
+
+// run does the work of the program after the input has been checked.
+func run(opts options, logger *slog.Logger) error {
+	if opts.memProf != "" {
+		runtime.MemProfileRate = 4096 // sample finely enough to see small allocations
 	}
 
-	if problem := checkInput(*data, *b, *workers, *impl); problem != "" {
+	readStart := time.Now()
+	values, err := readColumn(opts.data)
+	if err != nil {
+		return fmt.Errorf("could not read %s (expected one number per line, with an optional header): %w", opts.data, err)
+	}
+	if len(values) == 0 {
+		return fmt.Errorf("%s has no numbers in it", opts.data)
+	}
+	readTime := time.Since(readStart)
+	logger.Info("data loaded", "file", opts.data, "n", len(values), "seconds", readTime.Seconds())
+
+	stopCPUProfile, err := startCPUProfile(opts.cpuProf)
+	if err != nil {
+		return fmt.Errorf("could not start the CPU profile: %w", err)
+	}
+	result, bootTime, err := runBootstrap(values, opts)
+	stopCPUProfile()
+	if err != nil {
+		return err
+	}
+
+	summary := buildReport(result, opts, readTime, bootTime)
+	logger.Info("bootstrap finished", "impl", opts.impl, "workers", result.Workers,
+		"median", result.Median, "se", result.SE, "seconds", summary.BootSeconds,
+		"total_alloc_mb", summary.TotalAllocMB, "num_gc", summary.NumGC)
+
+	if err := writeMemProfile(opts.memProf); err != nil {
+		return fmt.Errorf("could not write the memory profile: %w", err)
+	}
+	return writeReport(os.Stdout, summary, opts.asJSON)
+}
+
+func main() {
+	opts := parseFlags()
+	if problem := checkInput(opts.data, opts.b, opts.workers, opts.impl); problem != "" {
 		fmt.Fprintf(os.Stderr, "bootmedian: %s\n\nRun 'bootmedian -h' for the full list of options.\n", problem)
 		os.Exit(2)
 	}
-	if *memProf != "" {
-		runtime.MemProfileRate = 4096 // sample finely enough to see small allocations
-	}
-	logger.Debug("start", "go", runtime.Version(), "gomaxprocs", runtime.GOMAXPROCS(0),
-		"impl", *impl, "b", *b, "seed", *seed)
-
-	t0 := time.Now()
-	x, err := readColumn(*data)
+	logger, closeLog, err := newLogger(opts.logPath, opts.verbose)
 	if err != nil {
-		fail("could not read the data file (expected one number per line, with an optional header)", err)
+		fmt.Fprintf(os.Stderr, "bootmedian: could not open the log file: %v\n", err)
+		os.Exit(1)
 	}
-	if len(x) == 0 {
-		fail("the data file has no numbers in it", bootstrap.ErrEmpty)
-	}
-	readSec := time.Since(t0).Seconds()
-	logger.Info("data loaded", "file", *data, "n", len(x), "seconds", readSec)
+	defer closeLog()
 
-	if *cpuProf != "" {
-		f, err := os.Create(*cpuProf)
-		if err != nil {
-			fail("cpu profile", err)
-		}
-		defer f.Close()
-		if err := pprof.StartCPUProfile(f); err != nil {
-			fail("cpu profile", err)
-		}
-		defer pprof.StopCPUProfile()
-	}
-
-	t1 := time.Now()
-	var res bootstrap.Result
-	switch *impl {
-	case "naive":
-		res, err = bootstrap.MedianSENaive(x, *b, *seed)
-	case "fast":
-		res, err = bootstrap.MedianSE(x, *b, *seed, *workers)
-	default:
-		err = fmt.Errorf("unknown -impl %q", *impl)
-	}
-	if err != nil {
-		fail("bootstrap failed", err)
-	}
-	bootSec := time.Since(t1).Seconds()
-
-	var ms runtime.MemStats
-	runtime.ReadMemStats(&ms)
-	out := output{
-		Result: res, File: *data, Impl: *impl, Seed: *seed,
-		ReadSeconds: readSec, BootSeconds: bootSec,
-		TotalAllocMB: float64(ms.TotalAlloc) / (1 << 20),
-		HeapSysMB:    float64(ms.HeapSys) / (1 << 20),
-		NumGC:        ms.NumGC,
-	}
-	logger.Info("bootstrap finished", "impl", *impl, "workers", res.Workers,
-		"median", res.Median, "se", res.SE, "seconds", bootSec,
-		"total_alloc_mb", out.TotalAllocMB, "num_gc", ms.NumGC)
-
-	if *memProf != "" {
-		f, err := os.Create(*memProf)
-		if err != nil {
-			fail("mem profile", err)
-		}
-		defer f.Close()
-		if err := pprof.Lookup("allocs").WriteTo(f, 0); err != nil {
-			fail("mem profile", err)
-		}
-	}
-
-	enc := json.NewEncoder(os.Stdout)
-	if err := enc.Encode(out); err != nil {
-		fail("encode", err)
+	if err := run(opts, logger); err != nil {
+		logger.Error("run failed", "err", err)
+		fmt.Fprintf(os.Stderr, "bootmedian: %v\n", err)
+		closeLog()
+		os.Exit(1)
 	}
 }
