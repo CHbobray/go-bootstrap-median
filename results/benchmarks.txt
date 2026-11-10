@@ -1,0 +1,18 @@
+goos: linux
+goarch: amd64
+pkg: bootmedian/bootstrap
+cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
+BenchmarkMedianSort-2          	    1659	    721542 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMedianQuickselect-2   	   10000	    104202 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBootstrapNaive/n=1000-2         	      69	  17659332 ns/op	 2112168 B/op	     261 allocs/op
+BenchmarkBootstrapNaive/n=10000-2        	       5	 222745382 ns/op	21060256 B/op	     261 allocs/op
+BenchmarkBootstrapNaive/n=100000-2       	       1	2690264111 ns/op	206330528 B/op	     261 allocs/op
+BenchmarkBootstrapFast/n=1000/workers=1-2         	     243	   4315383 ns/op	   20616 B/op	       7 allocs/op
+BenchmarkBootstrapFast/n=1000/workers=2-2         	     552	   2255395 ns/op	   28957 B/op	       9 allocs/op
+BenchmarkBootstrapFast/n=10000/workers=1-2        	      31	  39148208 ns/op	  168072 B/op	       7 allocs/op
+BenchmarkBootstrapFast/n=10000/workers=2-2        	      56	  20384170 ns/op	  250107 B/op	       9 allocs/op
+BenchmarkBootstrapFast/n=100000/workers=1-2       	       3	 415291317 ns/op	 1609866 B/op	       7 allocs/op
+BenchmarkBootstrapFast/n=100000/workers=2-2       	       5	 234184115 ns/op	 2412800 B/op	       9 allocs/op
+BenchmarkJumpStartStudy-2                         	       8	 143987040 ns/op	 1298048 B/op	     902 allocs/op
+PASS
+ok  	bootmedian/bootstrap	20.764s

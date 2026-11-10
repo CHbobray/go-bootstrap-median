@@ -1,0 +1,29 @@
+
+Study conditions:
+  Population mean: 100 SD: 10
+
+Estimated standard errors using 100 bootstrap samples
+
+Samples of size n = 25
+  SE Mean from Central Limit Theorem: 2.00
+  SE Mean from Samples: 1.94
+  SE Mean from Bootstrap Samples: 1.92
+  SE Median from Bootstrap Samples: 2.12
+
+Samples of size n = 100
+  SE Mean from Central Limit Theorem: 1.00
+  SE Mean from Samples: 1.20
+  SE Mean from Bootstrap Samples: 1.20
+  SE Median from Bootstrap Samples: 1.38
+
+Samples of size n = 225
+  SE Mean from Central Limit Theorem: 0.67
+  SE Mean from Samples: 0.60
+  SE Mean from Bootstrap Samples: 0.61
+  SE Median from Bootstrap Samples: 0.75
+
+Samples of size n = 400
+  SE Mean from Central Limit Theorem: 0.50
+  SE Mean from Samples: 0.42
+  SE Mean from Bootstrap Samples: 0.43
+  SE Median from Bootstrap Samples: 0.61
