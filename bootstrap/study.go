@@ -66,6 +66,8 @@ func StdDev(data []float64) float64 {
 }
 
 // resample fills dst with len(dst) draws from data, with replacement.
+// Multiply-shift maps a 64-bit draw onto [0, n) without a division or a
+// rejection loop. The bias is below n/2^64.
 func resample(dst, data []float64, rng *mt19937.MT19937) {
 	n := uint64(len(data))
 	for i := range dst {

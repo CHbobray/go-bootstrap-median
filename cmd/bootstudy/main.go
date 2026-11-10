@@ -8,11 +8,25 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
 	"github.com/CHbobray/go-bootstrap-median/bootstrap"
 )
+
+// writeListing prints the study results in the layout of the R listing.
+func writeListing(w io.Writer, cfg bootstrap.StudyConfig, rows []bootstrap.StudyRow) {
+	fmt.Fprintf(w, "\nStudy conditions:\n  Population mean: %g SD: %g\n", cfg.PopMean, cfg.PopSD)
+	fmt.Fprintf(w, "\nEstimated standard errors using %d bootstrap samples\n", cfg.B)
+	for _, row := range rows {
+		fmt.Fprintf(w, "\nSamples of size n = %d\n", row.N)
+		fmt.Fprintf(w, "  SE Mean from Central Limit Theorem: %.2f\n", row.SEMeanCLT)
+		fmt.Fprintf(w, "  SE Mean from Samples: %.2f\n", row.SEMeanSample)
+		fmt.Fprintf(w, "  SE Mean from Bootstrap Samples: %.2f\n", row.SEMeanBoot)
+		fmt.Fprintf(w, "  SE Median from Bootstrap Samples: %.2f\n", row.SEMedianBoot)
+	}
+}
 
 func main() {
 	b := flag.Int("b", 100, "bootstrap samples per sample (1 or more)")
@@ -26,9 +40,12 @@ func main() {
 	flag.Parse()
 
 	cfg := bootstrap.StudyConfig{
-		PopMean: 100, PopSD: 10,
+		PopMean:     100,
+		PopSD:       10,
 		SampleSizes: []int{25, 100, 225, 400},
-		Iterations:  *iterations, B: *b, Seed: *seed,
+		Iterations:  *iterations,
+		B:           *b,
+		Seed:        *seed,
 	}
 	start := time.Now()
 	rows, err := bootstrap.RunStudy(cfg)
@@ -37,16 +54,6 @@ func main() {
 			*b, *iterations)
 		os.Exit(2)
 	}
-	elapsed := time.Since(start)
-
-	fmt.Printf("\nStudy conditions:\n  Population mean: %g SD: %g\n", cfg.PopMean, cfg.PopSD)
-	fmt.Printf("\nEstimated standard errors using %d bootstrap samples\n", cfg.B)
-	for _, r := range rows {
-		fmt.Printf("\nSamples of size n = %d\n", r.N)
-		fmt.Printf("  SE Mean from Central Limit Theorem: %.2f\n", r.SEMeanCLT)
-		fmt.Printf("  SE Mean from Samples: %.2f\n", r.SEMeanSample)
-		fmt.Printf("  SE Mean from Bootstrap Samples: %.2f\n", r.SEMeanBoot)
-		fmt.Printf("  SE Median from Bootstrap Samples: %.2f\n", r.SEMedianBoot)
-	}
-	fmt.Fprintf(os.Stderr, "\nstudy finished in %s\n", elapsed.Round(time.Microsecond))
+	writeListing(os.Stdout, cfg, rows)
+	fmt.Fprintf(os.Stderr, "\nstudy finished in %s\n", time.Since(start).Round(time.Microsecond))
 }

@@ -17,7 +17,6 @@ package bootstrap
 import (
 	"errors"
 	"math"
-	"math/bits"
 	"math/rand"
 	"runtime"
 	"sort"
@@ -206,6 +205,28 @@ func MedianSENaive(data []float64, b int, seed int64) (Result, error) {
 	return summarise(data, reps, 1), nil
 }
 
+// fillChunks is the work of one goroutine. It claims chunks of replicates
+// from nextChunk until none are left and writes each bootstrap median into
+// reps. Workers write to disjoint parts of reps, so no lock is needed.
+func fillChunks(data, reps []float64, seed int64, nextChunk *atomic.Int64) {
+	b := len(reps)
+	nChunks := (b + chunkSize - 1) / chunkSize
+	buf := make([]float64, len(data)) // one buffer per worker, reused
+	rng := mt19937.New()
+	for {
+		chunk := int(nextChunk.Add(1) - 1)
+		if chunk >= nChunks {
+			return
+		}
+		rng.SeedFromSlice([]uint64{uint64(seed), uint64(chunk)})
+		end := min((chunk+1)*chunkSize, b)
+		for r := chunk * chunkSize; r < end; r++ {
+			resample(buf, data, rng)
+			reps[r] = medianInPlace(buf)
+		}
+	}
+}
+
 // MedianSE is the tuned bootstrap. workers <= 0 means runtime.GOMAXPROCS(0).
 // For a given seed the result does not depend on the number of workers.
 func MedianSE(data []float64, b int, seed int64, workers int) (Result, error) {
@@ -219,36 +240,15 @@ func MedianSE(data []float64, b int, seed int64, workers int) (Result, error) {
 	if workers > nChunks {
 		workers = nChunks
 	}
-	n := len(data)
-	un := uint64(n)
 	reps := make([]float64, b)
 
-	var next atomic.Int64
+	var nextChunk atomic.Int64
 	var wg sync.WaitGroup
 	for w := 0; w < workers; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			buf := make([]float64, n) // one buffer per worker, reused
-			rng := mt19937.New()
-			for {
-				c := int(next.Add(1) - 1)
-				if c >= nChunks {
-					return
-				}
-				rng.SeedFromSlice([]uint64{uint64(seed), uint64(c)})
-				end := min((c+1)*chunkSize, b)
-				for r := c * chunkSize; r < end; r++ {
-					for i := range buf {
-						// Multiply-shift maps a 64-bit draw onto [0, n)
-						// without a division or a rejection loop. The
-						// bias is below n/2^64.
-						idx, _ := bits.Mul64(rng.Uint64(), un)
-						buf[i] = data[idx]
-					}
-					reps[r] = medianInPlace(buf)
-				}
-			}
+			fillChunks(data, reps, seed, &nextChunk)
 		}()
 	}
 	wg.Wait()
