@@ -453,7 +453,7 @@ What I did:
 What was not generated: `r/run-bootstrap-median.R` and its listing are the
 course jump-start files by Thomas W. Miller, unchanged.
 
-Conversation log: _add the share link or exported text file here._
+Conversation log: https://claude.ai/share/26178a8f-9696-4de1-8913-8e8c5bb3bdbe
 
 ## References
 
