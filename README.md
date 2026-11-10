@@ -80,7 +80,7 @@ is a few hundred lines that you write, test and own.
 | `r/` | the three R programs and the jump-start sample listing |
 | `data/` | the three test data sets, 100,000 observations each |
 | `scripts/run_comparison.sh` | runs R and Go on the same files, records time and peak memory |
-| `results/` | benchmark output, comparison results, pprof profiles, program log, Go study listing |
+| `results/` | benchmark output, comparison results, pprof profiles (binary, plus `profiles.txt` as readable text), program log, Go study listing |
 
 ## Building the applications
 
@@ -106,8 +106,9 @@ These are terminal programs, so on macOS they are plain executables rather
 than `.app` bundles. To build for another system from any machine, set
 `GOOS` and `GOARCH`, for example
 `GOOS=windows GOARCH=amd64 go build -o bootmedian.exe ./cmd/bootmedian`.
-Windows and macOS builds were checked by cross-compiling; the programs were
-run on Linux.
+The Windows build was built and run on Windows 11 (12 cores); the macOS build
+was checked by cross-compiling. Benchmark figures in this README are from a
+2-vCPU Linux VM.
 
 ## Using the applications
 
@@ -120,8 +121,27 @@ run on Linux.
 ```
 
 `bootmedian` reads a CSV with one number per line (a header line is allowed)
-and prints one line of JSON: n, replicates, median, standard error, bias, 95%
-percentile interval, timings and memory statistics. Options:
+and prints a short summary:
+
+```
+$ ./bootmedian -data data/symmetric_n100000.csv
+Bootstrap standard error of the median
+
+  Data file:       data/symmetric_n100000.csv
+  Observations:    100000
+  Replicates:      2000 (seed 1)
+  Method:          fast, 2 worker(s)
+
+  Median:          49.9818
+  Standard error:  0.0408
+  Bias:            -0.0014
+  95% interval:    49.9015 to 50.0635
+
+  Time:            1.78 s bootstrap, 0.02 s reading data
+  Memory:          8.6 MB allocated, 2 garbage collections
+```
+
+Options:
 
 | Flag | Default | Meaning |
 |---|---|---|
@@ -130,12 +150,13 @@ percentile interval, timings and memory statistics. Options:
 | `-seed` | 1 | Mersenne Twister seed |
 | `-workers` | 0 | goroutines; 0 means all cores |
 | `-impl` | fast | `fast` (tuned) or `naive` (literal port) |
-| `-log` | none | also append JSON log lines to this file |
+| `-json` | off | print the result as one line of JSON, for scripts |
+| `-v` | off | show progress logs on the screen |
+| `-log` | none | append JSON log lines to this file |
 | `-cpuprofile`, `-memprofile` | none | write pprof profiles |
-| `-v` | off | debug logging |
 
-Input is checked before any work starts, and problems are reported in plain
-language. For example:
+All three programs check their input before any work starts and report
+problems in plain language. For example:
 
 ```
 $ ./bootmedian -data nope.csv
@@ -143,9 +164,13 @@ bootmedian: cannot find data file "nope.csv". Check the path, or create the test
 
 $ ./bootmedian -data data/symmetric_n100000.csv -b 1
 bootmedian: -b is 1, but at least 2 bootstrap replicates are needed (1000 or more is typical).
+
+$ ./gendata -n -5
+gendata: -n is -5, but each data set needs at least 1 observation (100 or more for a useful bootstrap).
 ```
 
-A file with a non-numeric line is rejected with the file name and line number.
+A file with a non-numeric line is rejected with the line number and the
+offending text.
 
 ## Testing and reproducing the results
 
@@ -179,7 +204,8 @@ identical numbers.
 
 ### Testing
 
-`go test` covers 99% of statements in the `bootstrap` package. The tests
+`go test` covers 99% of statements in the `bootstrap` package, and each of
+the three commands has its own tests. The tests
 use synthetic data from the Mersenne Twister and check:
 
 - the median against hand-worked cases, and that the input is not modified;
@@ -191,7 +217,11 @@ use synthetic data from the Mersenne Twister and check:
 - error handling for empty data, NaN, and fewer than two replicates;
 - the Monte Carlo study against the Central Limit Theorem, and that it is
   reproducible;
-- the command-line input checks and the CSV reader.
+- the command-line input checks, the CSV reader, both output formats, and a
+  full end-to-end run with a log file;
+- that `gendata` writes the right number of rows and identical files for the
+  same seed;
+- that `bootstudy` prints the layout of the R listing.
 
 Testing against R caught a real mistake. The first parallel design seeded
 chunk *c* with `seed + c`, so runs with seeds 1, 2, 3 reused almost all the
@@ -204,38 +234,39 @@ The first Go version was a literal port of the R idiom: allocate a new slice per
 fill it with `rng.Intn`, sort it, read the middle. It was slower than R,
 because R's `median()` uses a partial sort and Go's version did a full one.
 
-CPU profile of the naive version (`results/cpu_naive.prof`): about 88% of
-time inside `slices.pdqsort` and its helpers. Allocation profile: 388 MB
-allocated and 126 garbage collections for 500 replicates. That pointed to
+CPU profile of the naive version (`results/cpu_naive.prof`, readable copy in
+`results/profiles.txt`): about 85% of
+time inside `slices.pdqsort` and its helpers. Allocation profile: about 390 MB
+allocated and 127 garbage collections for 500 replicates. That pointed to
 four changes:
 
 1. **Quickselect instead of a full sort.** The median needs one order
-   statistic, not a sorted array. Micro-benchmark at n = 10,000: 722 µs for
-   sort, 104 µs for quickselect.
+   statistic, not a sorted array. Micro-benchmark at n = 10,000: 760 µs for
+   sort, 96 µs for quickselect.
 2. **One reusable buffer per worker.** Allocation per run at n = 100,000
    fell from 206 MB to 1.6 MB (benchmark `B/op`), and garbage collections from
-   126 to 2.
+   127 to 3.
 3. **Cheaper bounded random integers.** A 64-bit multiply-shift replaces
    `rand.Intn`, removing a layer of interface calls and a modulo.
 4. **Goroutines.** Replicates are split into chunks of 64, each with its own
    seeded generator, pulled by workers from an atomic counter. No locks, and
    the answer does not depend on the worker count.
 
-After tuning, the profile is 66% quickselect and most of the rest random
+After tuning, the profile is about 60% quickselect and most of the rest random
 number generation, which is the actual work of the method.
 
 Benchmarks (`results/benchmarks.txt`, 256 replicates per op, 2-vCPU Xeon):
 
 | n | Naive | Tuned, 1 worker | Tuned, 2 workers | Speed-up (2 workers) |
 |---|---|---|---|---|
-| 1,000 | 17.7 ms | 4.3 ms | 2.3 ms | 8× |
-| 10,000 | 223 ms | 39.1 ms | 20.4 ms | 11× |
-| 100,000 | 2,690 ms | 415 ms | 234 ms | 11× |
+| 1,000 | 17.2 ms | 4.2 ms | 2.3 ms | 7× |
+| 10,000 | 229 ms | 39.6 ms | 23.8 ms | 10× |
+| 100,000 | 3,053 ms | 418 ms | 229 ms | 13× |
 
 ### Logging
 
-`cmd/bootmedian` uses the standard library's `log/slog` with JSON output to
-stderr and, with `-log`, to a file. Each run records the file, n, load time,
+`cmd/bootmedian` uses the standard library's `log/slog` with JSON output,
+shown on screen with `-v` and appended to a file with `-log`. Each run records the file, n, load time,
 implementation, workers, estimates, elapsed time, total allocation and GC
 count. `results/run.log` has an example. The logs recorded the effect of each
 tuning step.

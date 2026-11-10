@@ -1,18 +1,18 @@
 goos: linux
 goarch: amd64
-pkg: bootmedian/bootstrap
+pkg: github.com/CHbobray/go-bootstrap-median/bootstrap
 cpu: Intel(R) Xeon(R) Processor @ 2.10GHz
-BenchmarkMedianSort-2          	    1659	    721542 ns/op	       0 B/op	       0 allocs/op
-BenchmarkMedianQuickselect-2   	   10000	    104202 ns/op	       0 B/op	       0 allocs/op
-BenchmarkBootstrapNaive/n=1000-2         	      69	  17659332 ns/op	 2112168 B/op	     261 allocs/op
-BenchmarkBootstrapNaive/n=10000-2        	       5	 222745382 ns/op	21060256 B/op	     261 allocs/op
-BenchmarkBootstrapNaive/n=100000-2       	       1	2690264111 ns/op	206330528 B/op	     261 allocs/op
-BenchmarkBootstrapFast/n=1000/workers=1-2         	     243	   4315383 ns/op	   20616 B/op	       7 allocs/op
-BenchmarkBootstrapFast/n=1000/workers=2-2         	     552	   2255395 ns/op	   28957 B/op	       9 allocs/op
-BenchmarkBootstrapFast/n=10000/workers=1-2        	      31	  39148208 ns/op	  168072 B/op	       7 allocs/op
-BenchmarkBootstrapFast/n=10000/workers=2-2        	      56	  20384170 ns/op	  250107 B/op	       9 allocs/op
-BenchmarkBootstrapFast/n=100000/workers=1-2       	       3	 415291317 ns/op	 1609866 B/op	       7 allocs/op
-BenchmarkBootstrapFast/n=100000/workers=2-2       	       5	 234184115 ns/op	 2412800 B/op	       9 allocs/op
-BenchmarkJumpStartStudy-2                         	       8	 143987040 ns/op	 1298048 B/op	     902 allocs/op
+BenchmarkMedianSort-2          	    1645	    760044 ns/op	       0 B/op	       0 allocs/op
+BenchmarkMedianQuickselect-2   	   12219	     96302 ns/op	       0 B/op	       0 allocs/op
+BenchmarkBootstrapNaive/n=1000-2         	      69	  17153756 ns/op	 2112165 B/op	     261 allocs/op
+BenchmarkBootstrapNaive/n=10000-2        	       5	 228754330 ns/op	21060256 B/op	     261 allocs/op
+BenchmarkBootstrapNaive/n=100000-2       	       1	3053422287 ns/op	206335872 B/op	     267 allocs/op
+BenchmarkBootstrapFast/n=1000/workers=1-2         	     291	   4217334 ns/op	   20584 B/op	       7 allocs/op
+BenchmarkBootstrapFast/n=1000/workers=2-2         	     553	   2348449 ns/op	   28889 B/op	       9 allocs/op
+BenchmarkBootstrapFast/n=10000/workers=1-2        	      26	  39570029 ns/op	  168040 B/op	       7 allocs/op
+BenchmarkBootstrapFast/n=10000/workers=2-2        	      56	  23763564 ns/op	  250040 B/op	       9 allocs/op
+BenchmarkBootstrapFast/n=100000/workers=1-2       	       3	 418416684 ns/op	 1609840 B/op	       7 allocs/op
+BenchmarkBootstrapFast/n=100000/workers=2-2       	       5	 228698104 ns/op	 2412732 B/op	       9 allocs/op
+BenchmarkJumpStartStudy-2                         	       7	 149552273 ns/op	 1298048 B/op	     902 allocs/op
 PASS
-ok  	bootmedian/bootstrap	20.764s
+ok  	github.com/CHbobray/go-bootstrap-median/bootstrap	22.495s

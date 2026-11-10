@@ -1,0 +1,54 @@
+===== CPU profile, -impl naive (go tool pprof -top) =====
+Type: cpu
+Duration: 6.03s, Total samples = 5.87s (97.28%)
+Showing nodes accounting for 5.65s, 96.25% of 5.87s total
+Dropped 44 nodes (cum <= 0.03s)
+Showing top 10 nodes out of 32
+      flat  flat%   sum%        cum   cum%
+     3.54s 60.31% 60.31%      4.12s 70.19%  slices.partitionOrdered[go.shape.float64]
+     0.62s 10.56% 70.87%      0.68s 11.58%  cmp.Less[go.shape.float64] (inline)
+     0.52s  8.86% 79.73%      0.61s 10.39%  slices.insertionSortOrdered[go.shape.float64]
+     0.32s  5.45% 85.18%      5.79s 98.64%  github.com/CHbobray/go-bootstrap-median/bootstrap.MedianSENaive
+     0.22s  3.75% 88.93%      0.42s  7.16%  math/rand.(*Rand).Int31n
+     0.17s  2.90% 91.82%      0.18s  3.07%  github.com/seehuhn/mt19937.(*MT19937).Int63
+     0.11s  1.87% 93.70%         5s 85.18%  slices.pdqsortOrdered[go.shape.float64]
+     0.06s  1.02% 94.72%      0.06s  1.02%  cmp.isNaN[go.shape.float64] (inline)
+     0.05s  0.85% 95.57%      0.07s  1.19%  slices.order2Ordered[go.shape.float64] (inline)
+     0.04s  0.68% 96.25%      0.11s  1.87%  slices.medianOrdered[go.shape.float64]
+
+===== Allocation profile, -impl naive (go tool pprof -sample_index=alloc_space -top) =====
+Type: alloc_space
+Showing nodes accounting for 395204.27kB, 99.67% of 396500.01kB total
+Dropped 42 nodes (cum <= 1982.50kB)
+Showing top 5 nodes out of 7
+      flat  flat%   sum%        cum   cum%
+388870.33kB 98.08% 98.08% 388870.33kB 98.08%  github.com/CHbobray/go-bootstrap-median/bootstrap.MedianSENaive
+ 4019.27kB  1.01% 99.09%  6340.23kB  1.60%  main.readColumn
+ 2310.62kB  0.58% 99.67%  2310.62kB  0.58%  bufio.(*Scanner).Text (inline)
+    4.05kB 0.001% 99.67% 396385.46kB   100%  runtime.main
+         0     0% 99.67% 396381.41kB   100%  main.main
+
+===== CPU profile, -impl fast (go tool pprof -top) =====
+Type: cpu
+Duration: 1s, Total samples = 880ms (87.64%)
+Showing nodes accounting for 880ms, 100% of 880ms total
+      flat  flat%   sum%        cum   cum%
+     550ms 62.50% 62.50%      550ms 62.50%  github.com/CHbobray/go-bootstrap-median/bootstrap.selectK
+     170ms 19.32% 81.82%      170ms 19.32%  github.com/seehuhn/mt19937.(*MT19937).Uint64
+     150ms 17.05% 98.86%      320ms 36.36%  github.com/CHbobray/go-bootstrap-median/bootstrap.resample
+      10ms  1.14%   100%      560ms 63.64%  github.com/CHbobray/go-bootstrap-median/bootstrap.medianInPlace
+         0     0%   100%      880ms   100%  github.com/CHbobray/go-bootstrap-median/bootstrap.MedianSE.func1
+         0     0%   100%      880ms   100%  github.com/CHbobray/go-bootstrap-median/bootstrap.fillChunks
+
+===== Allocation profile, -impl fast (go tool pprof -sample_index=alloc_space -top) =====
+Type: alloc_space
+Showing nodes accounting for 7485.86kB, 99.20% of 7546.08kB total
+Dropped 46 nodes (cum <= 37.73kB)
+Showing top 5 nodes out of 7
+      flat  flat%   sum%        cum   cum%
+ 4011.16kB 53.16% 53.16%  6340.15kB 84.02%  main.readColumn
+ 2318.65kB 30.73% 83.88%  2318.65kB 30.73%  bufio.(*Scanner).Text (inline)
+    1152kB 15.27% 99.15%     1152kB 15.27%  runtime/pprof.StartCPUProfile
+    4.05kB 0.054% 99.20%  7532.65kB 99.82%  runtime.main
+         0     0% 99.20%  7528.59kB 99.77%  main.main
+

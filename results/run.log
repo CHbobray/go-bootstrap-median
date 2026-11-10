@@ -1,4 +1,4 @@
-{"time":"2026-11-09T18:31:11.312791311-06:00","level":"INFO","msg":"data loaded","file":"data/symmetric_n100000.csv","n":100000,"seconds":0.018935501}
-{"time":"2026-11-09T18:31:16.447330507-06:00","level":"INFO","msg":"bootstrap finished","impl":"naive","workers":1,"median":49.98180570164527,"se":0.03929002081255527,"seconds":5.133434519,"total_alloc_mb":388.82144927978516,"num_gc":126}
-{"time":"2026-11-09T18:31:16.655972807-06:00","level":"INFO","msg":"data loaded","file":"data/symmetric_n100000.csv","n":100000,"seconds":0.010664811}
-{"time":"2026-11-09T18:31:17.425331346-06:00","level":"INFO","msg":"bootstrap finished","impl":"fast","workers":1,"median":49.98180570164527,"se":0.04010722437591727,"seconds":0.768523465,"total_alloc_mb":6.708061218261719,"num_gc":2}
+{"time":"2026-11-09T21:06:00.130415379-06:00","level":"INFO","msg":"data loaded","file":"data/symmetric_n100000.csv","n":100000,"seconds":0.01626753}
+{"time":"2026-11-09T21:06:06.167309015-06:00","level":"INFO","msg":"bootstrap finished","impl":"naive","workers":1,"median":49.98180570164527,"se":0.03929002081255527,"seconds":5.865528859,"total_alloc_mb":392.50465393066406,"num_gc":127}
+{"time":"2026-11-09T21:06:06.186972637-06:00","level":"INFO","msg":"data loaded","file":"data/symmetric_n100000.csv","n":100000,"seconds":0.015275132}
+{"time":"2026-11-09T21:06:07.193141318-06:00","level":"INFO","msg":"bootstrap finished","impl":"fast","workers":1,"median":49.98180570164527,"se":0.04010722437591727,"seconds":0.884176226,"total_alloc_mb":10.134422302246094,"num_gc":3}
