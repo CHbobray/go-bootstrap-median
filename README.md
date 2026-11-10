@@ -200,7 +200,7 @@ identical numbers.
 | `symmetric` | N(50, 10) | +0.01 |
 | `negative_skew` | 150 − log-normal | −2.51 |
 
-## Building the Go version
+## Developing the Go version
 
 ### Testing
 
@@ -415,20 +415,40 @@ data.
 ## GenAI Tools
 
 This repository was produced with Claude (Anthropic), used as a coding agent
-in two prompts: the assignment text, then the grading guidelines and the
-jump-start R files.
+over one conversation. The prompts, in order, were:
+
+1. the assignment text;
+2. the grading guidelines and the course jump-start R files;
+3. questions on setting up Git and GitHub;
+4. a request to confirm the Mersenne Twister package named in the assignment;
+5. a request to check the work against the grading rubric, then to fix the
+   gaps that check found;
+6. a request to review this README on GitHub.
 
 What the tool did:
 
-- chose the design, wrote the Go package, the three Go commands, the tests
-  and benchmarks, the two new R scripts and the comparison script;
-- installed R and Go tooling in a cloud Linux workspace and ran everything
-  there. All timings, memory figures, profiles and estimates in this README
-  come from those runs, on a 2-vCPU VM;
+- chose the design and wrote the Go package, the three Go commands, the
+  tests and benchmarks, the two new R scripts and the comparison script;
+- installed R and Go in a cloud Linux workspace and ran everything there.
+  The timings, memory figures, profiles and estimates in this README come
+  from those runs, on a 2-vCPU VM;
 - found and fixed the seeding mistake described under Testing by comparing
   Go results with R across seeds;
+- read the mt19937 package and noted its 64-bit variant, concurrency rule
+  and license;
+- reviewed the repository against the rubric and then added input checks to
+  `gendata`, split `bootmedian` into smaller functions, made its output
+  readable by default, and added tests for all three commands;
 - looked up the AWS prices and drafted this README, including the
   recommendation.
+
+What I did:
+
+- created the GitHub repository and made the commits and pushes;
+- built the programs on Windows 11 (12 cores), ran `bootmedian` on the test
+  data and ran the full test suite, confirming the same median and standard
+  error as the Linux runs;
+- reviewed the code, results and recommendation before submitting.
 
 What was not generated: `r/run-bootstrap-median.R` and its listing are the
 course jump-start files by Thomas W. Miller, unchanged.
